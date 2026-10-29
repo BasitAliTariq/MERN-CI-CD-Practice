@@ -58,7 +58,8 @@ jobs:
           script: |
             set -eu
 
-            cd /home/ubuntu/app
+            cd /home/ubuntu/app/MERN-CI-CD-Practice
+
 
             # Update deployment files from the same commit.
             git fetch origin main
