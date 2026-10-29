@@ -1,0 +1,88 @@
+name: Build and Deploy MERN App
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          push: true
+          build-args: |
+            VITE_BACKEND_URL=
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mern-frontend:${{ github.sha }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mern-backend:${{ github.sha }}
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+
+            cd /home/ubuntu/app
+
+            # Update deployment files from the same commit.
+            git fetch origin main
+            git checkout main
+            git reset --hard ${{ github.sha }}
+
+            # Write runtime secrets on EC2.
+            umask 077
+            cat > .env <<'ENVFILE'
+            IMAGE_TAG=${{ github.sha }}
+            CLIENT_ORIGIN=http://${{ secrets.EC2_HOST }}
+            MONGODB_URL=${{ secrets.MONGODB_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            SMTP_USER=${{ secrets.SMTP_USER }}
+            SMTP_PASS=${{ secrets.SMTP_PASS }}
+            SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
+            ENVFILE
+
+            # Authenticate securely if Docker Hub repositories are private.
+            echo '${{ secrets.DOCKERHUB_TOKEN }}' | \
+              docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker compose ps
+
+            docker logout
