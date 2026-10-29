@@ -60,30 +60,27 @@ jobs:
 
             cd /home/ubuntu/app/MERN-CI-CD-Practice
 
-
             # Update deployment files from the same commit.
             git fetch origin main
             git checkout main
             git reset --hard ${{ github.sha }}
 
-            # Write runtime secrets on EC2.
-            umask 077
-            cat > .env <<'ENVFILE'
-            IMAGE_TAG=${{ github.sha }}
-            CLIENT_ORIGIN=http://${{ secrets.EC2_HOST }}
-            MONGODB_URL=${{ secrets.MONGODB_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            SMTP_USER=${{ secrets.SMTP_USER }}
-            SMTP_PASS=${{ secrets.SMTP_PASS }}
-            SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
-            ENVFILE
+            # Update only IMAGE_TAG in the existing .env.
+            # Preserve all other manually configured variables.
+            if grep -q '^IMAGE_TAG=' .env; then
+              sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${{ github.sha }}/' .env
+            else
+              printf '\nIMAGE_TAG=${{ github.sha }}\n' >> .env
+            fi
 
-            # Authenticate securely if Docker Hub repositories are private.
+            # Authenticate with Docker Hub.
             echo '${{ secrets.DOCKERHUB_TOKEN }}' | \
               docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin
 
+            # Deploy the new images.
             docker compose pull
             docker compose up -d --remove-orphans
             docker compose ps
 
+            # Remove Docker credentials from the EC2 user's CLI config.
             docker logout
