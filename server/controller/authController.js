@@ -99,7 +99,7 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.json({
         success: false,
-        message: "Invalid password",
+        message: "Please enter valid password",
       });
     }
     //create token
