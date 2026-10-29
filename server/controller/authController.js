@@ -89,7 +89,7 @@ export const login = async (req, res) => {
     if (!user) {
       return res.json({
         success: false,
-        message: "Plaese enter valid email",
+        message: "Plaese enter valid Email.",
       });
     }
 
@@ -99,7 +99,8 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.json({
         success: false,
-        message: "Please enter valid password",
+        message:
+          "Please enter valid Password.If you do not know please click forgot password",
       });
     }
     //create token
